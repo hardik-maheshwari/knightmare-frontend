@@ -1,0 +1,11 @@
+.chess-piece {
+  width: 85%;
+  height: 85%;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  cursor: grab; /* Indicates the piece can be moved */
+}
+.chess-piece:active {
+  cursor: grabbing; /* Feedback for when the user is dragging */
+}

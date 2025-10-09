@@ -1,0 +1,66 @@
+.profile-container {
+  max-width: 600px;
+  margin: 4rem auto;
+  padding: 2rem;
+  text-align: center;
+  color: #e0e0e0; /* Giving the container a default light text color for the dark page */
+}
+
+.profile-card {
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 2rem;
+  margin-top: 2rem;
+  text-align: left;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  color: #333; /* <-- THIS IS THE FIX! It sets a dark text color for everything inside the card. */
+}
+
+.profile-card p {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.profile-card strong {
+  color: #333; /* This is still good to have */
+}
+
+/* Let's create a primary action button style for our "Go to Lobby" link */
+.primary-button {
+  margin-top: 2rem;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #007bff;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+  text-decoration: none; /* In case it's used on a link */
+  display: inline-block; /* To make padding and margin work correctly */
+}
+
+.primary-button:hover {
+  background-color: #0056b3;
+}
+
+
+.logout-button {
+  margin-top: 1rem; /* Reduced margin a bit */
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #dc3545;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.logout-button:hover {
+  background-color: #dc3545;
+  color: white;
+}

@@ -1,0 +1,73 @@
+/* --- Zenith Theme Foundation --- */
+:root {
+  --color-light-square: #f0d9b5;
+  --color-dark-square: #b58863;
+  --color-bg: #2c2a28;
+  --color-text: #e2e2e2;
+  --color-primary-accent: #81b64c;
+  font-family: "Inter", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* 3. We'll stick to our custom dark theme for now for a cohesive look */
+  color-scheme: dark;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+
+  /* These are great defaults from Vite, let's keep them */
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Global Styles & Resets --- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  /* Vite's centering is great for a single-page app view like ours */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+}
+
+/* --- Default Element Styling --- */
+a {
+  font-weight: 500;
+  color: var(--color-primary-accent); /* Use our theme's accent color */
+  text-decoration: inherit;
+  transition: color 0.2s ease-in-out;
+}
+a:hover {
+  color: #a4d87c; /* A lighter version of our accent */
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a; /* Kept Vite's default dark button */
+  color: var(--color-text);
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: var(--color-primary-accent); /* Use our accent for hover */
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}

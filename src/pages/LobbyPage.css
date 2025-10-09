@@ -1,0 +1,102 @@
+.lobby-container {
+  max-width: 800px;
+  margin: 4rem auto;
+  padding: 2rem;
+  text-align: center;
+  color: #e0e0e0;
+}
+
+.lobby-error {
+  color: #ff6b6b;
+  background-color: rgba(255, 107, 107, 0.1);
+  border: 1px solid #ff6b6b;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.lobby-section {
+  background-color: #2c2c2c;
+  padding: 2rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  border: 1px solid #444;
+}
+
+.lobby-section h2 {
+  margin-top: 0;
+}
+
+.lobby-section p {
+  color: #b0b0b0;
+  max-width: 400px;
+  margin: 0.5rem auto 1.5rem auto;
+}
+
+.join-form {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.game-id-input {
+  padding: 0.75rem;
+  font-size: 1rem;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #333;
+  color: #e0e0e0;
+  min-width: 250px;
+}
+
+.game-id-input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+/* A generic secondary button style */
+.secondary-button {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #007bff;
+  border-radius: 4px;
+  background-color: transparent;
+  color: #007bff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background-color: #007bff;
+  color: white;
+}
+
+.secondary-button:disabled {
+  border-color: #555;
+  color: #555;
+  cursor: not-allowed;
+}
+
+/* Primary button from before */
+.primary-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  background-color: #007bff;
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.primary-button:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.primary-button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
