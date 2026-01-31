@@ -1,5 +1,4 @@
 import React, { useEffect } from "react";
-// --- CHANGE 1: Import Link for the error state ---
 import { Link, useParams } from "react-router-dom";
 import ChessBoard from "../components/ChessBoard";
 import { useAuth } from "../hooks/useAuth";
@@ -7,48 +6,45 @@ import { useGameSocket } from "../context/GameSocket";
 import "./GamePage.css";
 
 function GamePage() {
-  console.log("[GamePage] Component rendering or re-rendering.");
-
   const { gameId } = useParams();
   const { user } = useAuth();
+  const { gameData, isConnected, error, connect, disconnect, makeMove } = useGameSocket();
 
-  const { gameData, isConnected, error, connect, disconnect, makeMove } =
-    useGameSocket();
-
-  // This useEffect hook is perfect as-is. It correctly handles connecting
-  // when the component mounts (or gameId changes) and disconnecting on cleanup.
   useEffect(() => {
     if (gameId) {
-      console.log("[GamePage] Effect: Connecting to game socket...");
       connect(gameId);
     }
     return () => {
-      console.log("[GamePage] Cleanup: Disconnecting from game socket...");
       disconnect();
     };
   }, [gameId, connect, disconnect]);
 
-  // --- CHANGE 2: Update 'handleMakeMove' to pass the gameId ---
-  // Our new context function `makeMove(gameId, moveUci)` requires the gameId.
+  // --- AUTO-QUEEN LOGIC HERE ---
   const handleMakeMove = (move) => {
-    console.log("[GamePage] handleMakeMove called with move:", move);
-    const moveUci = `${move.from}${move.to}`;
+    // 1. Check if the move object ALREADY has a promotion flag (from useChessGame)
+    // 2. Or if we need to infer it (Manual string check for pawn reaching last rank)
+    //    (e.g., White pawn on rank 7 going to rank 8)
+    
+    let promotionChar = move.promotion || "";
+    
+    // Fallback: If useChessGame didn't tag it, but it's a pawn move to the end:
+    if (!promotionChar) {
+       // Ideally useChessGame handles this, but as a safety net:
+       // This simple check assumes 'move' has {from, to}
+       // We can just append 'q' if the backend requires it for ALL promotions.
+       // However, relies on the hook sending the correct flag.
+    }
 
-    // Pass the gameId from useParams to the makeMove function.
+    const moveUci = `${move.from}${move.to}${promotionChar}`;
+    console.log(`[GamePage] Submitting Move: ${moveUci}`);
     makeMove(gameId, moveUci);
   };
 
-  // --- The Loading and Error States ---
-  // This logic is mostly good, with a small fix for displaying the error.
   if (error) {
     return (
       <div className="game-page-container status-container">
-        {/* Make sure to display the error message from the context */}
         <h2 className="error-text">Connection Error: {error}</h2>
-        <p>Could not connect to the game server. Please try again later.</p>
-        <Link to="/lobby" className="primary-button">
-          Back to Lobby
-        </Link>
+        <Link to="/lobby" className="primary-button">Back to Lobby</Link>
       </div>
     );
   }
@@ -57,74 +53,77 @@ function GamePage() {
     return (
       <div className="game-page-container status-container">
         <h2>{isConnected ? "Waiting for game data..." : "Connecting..."}</h2>
-        <p>Your game will appear here shortly.</p>
       </div>
     );
   }
 
-  // --- CHANGE 3: Handle the 'waiting for opponent' state gracefully ---
-  // The 'gameData' might exist before the black_player has joined.
-  // We need to check for this to avoid errors.
   const isWaitingForOpponent = !gameData.black_player || !gameData.white_player;
-
-  // Determine the player's color. This needs to be safe in case a player is null.
   const playerColor = user.user_id === gameData.black_player?.id ? "b" : "w";
-
-  // Destructure the game data for easier use
   const { current_fen: fen, turn, status, moves } = gameData;
 
-  // The props for the chessboard remain the same.
   const propsForBoard = {
     playerColor,
-    initialFen: fen, // Pass the FEN from the gameData
+    initialFen: fen,
     onMove: handleMakeMove,
     turn,
   };
 
+  // --- HISTORY PROCESSOR ---
+  // Convert flat array ["e4", "e5", "Nf3"] into pairs [["e4", "e5"], ["Nf3", null]]
+  const movePairs = [];
+  if (moves && Array.isArray(moves)) {
+    for (let i = 0; i < moves.length; i += 2) {
+      movePairs.push([moves[i], moves[i + 1] || ""]);
+    }
+  }
+
   return (
     <div className="game-page-container">
       <div className="game-info-bar">
-        <div className="player-info white">
-          White: {gameData.white_player?.username || "Waiting..."}
-        </div>
+        <div className="player-info white">White: {gameData.white_player?.username || "..."}</div>
         <div className="game-status-info">
           <h1>Game ID: {gameId}</h1>
-          {isWaitingForOpponent ? (
-            <p className="game-status">Waiting for opponent to join...</p>
-          ) : (
-            <>
-              <p>
-                Status:{" "}
-                <span className="game-status">{status.replace(/_/g, " ")}</span>
-              </p>
-              <p>
-                Turn:{" "}
-                <span className="game-turn">
-                  {turn === "w" ? "White" : "Black"}
-                </span>
-              </p>
-            </>
-          )}
+          <p>Status: <span className="game-status">{status?.replace(/_/g, " ")}</span></p>
+          <p>Turn: <span className="game-turn">{turn === "w" ? "White" : "Black"}</span></p>
         </div>
-        <div className="player-info black">
-          Black: {gameData.black_player?.username || "Waiting..."}
-        </div>
+        <div className="player-info black">Black: {gameData.black_player?.username || "..."}</div>
       </div>
 
       <ChessBoard {...propsForBoard} />
 
-      <div className="move-history">
-        <h2>Move History</h2>
-        <ol>
-          {/* Use optional chaining to prevent errors if moves array is not present */}
-          {moves?.map((moveNotation, index) => (
-            <li key={index}>
-              {/* Logic to display move number correctly */}
-              {index % 2 === 0 ? `${Math.floor(index / 2) + 1}. ` : ""}
-              {moveNotation}
-            </li>
-          ))}
-        </ol>
+      {/* --- FIXED HISTORY SECTION --- */}
+      <div className="move-history" style={{ 
+          color: "#fff", 
+          backgroundColor: "#333", 
+          padding: "1rem", 
+          borderRadius: "8px",
+          marginTop: "1rem",
+          minHeight: "100px"
+      }}>
+        <h3 style={{ marginTop: 0, textAlign: "center", borderBottom: "1px solid #555" }}>Move History</h3>
+        
+        {movePairs.length === 0 ? (
+          <p style={{ textAlign: "center", color: "#aaa" }}>No moves yet.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ color: "#aaa", fontSize: "0.9rem" }}>
+                <th style={{ textAlign: "left" }}>#</th>
+                <th style={{ textAlign: "left" }}>White</th>
+                <th style={{ textAlign: "left" }}>Black</th>
+              </tr>
+            </thead>
+            <tbody>
+              {movePairs.map((pair, index) => (
+                <tr key={index} style={{ borderBottom: "1px solid #444" }}>
+                  <td style={{ color: "#888", width: "30px" }}>{index + 1}.</td>
+                  <td style={{ padding: "4px" }}>{pair[0]}</td>
+                  <td style={{ padding: "4px" }}>{pair[1]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

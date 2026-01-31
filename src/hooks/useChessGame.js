@@ -1,15 +1,9 @@
-// src/hooks/useChessGame.js
-
-import { useState,useEffect } from "react";
-const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
-import {
-  initializeGame,
-  // makeMove,
-  // getCurrentFen,
-  getLegalMoves,
-} from "../services/chessEngine";
-
+import { useState, useEffect, useRef } from "react";
+// We import the specific class, not the singleton functions anymore
+import { Chess } from "chess.js";
 import { parseFen } from "../utils/fenUtils";
+
+const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 export const getIndexFromSquareId = (squareId) => {
   const file = squareId.charAt(0);
@@ -20,73 +14,112 @@ export const getIndexFromSquareId = (squareId) => {
 };
 
 export const useChessGame = (playerColor = "w", initialFen, onMove, turn) => {
-  console.log(`This is our initial fen ${initialFen}`);
-  console.log("*".repeat(100));
+  // 1. STATE: Visual board state
   const [boardState, setBoardState] = useState(() => parseFen(initialFen));
+
+  // 2. REF: Keep a local instance of chess.js for this specific component
+  // This prevents the "singleton" bugs.
+  const gameRef = useRef(new Chess(initialFen));
 
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [legalMoves, setLegalMoves] = useState([]);
 
+  // 3. EFFECT: Sync engine when Server FEN changes
   useEffect(() => {
-    console.log(
-      "[useChessGame] useEffect running to sync engine with new FEN."
-    );
+    try {
+      // Safe guard: If FEN is invalid, Chess() might throw
+      const newGame = new Chess(initialFen);
+      gameRef.current = newGame;
 
-    // The side effect:
-    initializeGame(initialFen);
+      // Update visual state
+      setBoardState(parseFen(initialFen));
 
-    // We also need to update our local boardState to match the new FEN.
-    setBoardState(parseFen(initialFen));
+      // Clear selections on external update (new turn)
+      setSelectedSquare(null);
+      setLegalMoves([]);
+    } catch (e) {
+      console.error("Invalid FEN received:", initialFen, e);
+    }
   }, [initialFen]);
 
   const handleSquareClick = (clickedSquareId) => {
-    console.log(
-      `[useChessGame] handleSquareClick called for square: ${clickedSquareId}`
-    );
+    const game = gameRef.current; // Use our local instance
 
+    // SCENARIO A: No piece currently selected
     if (selectedSquare === null) {
-      // --- This is the block we are improving ---
       const fromIndex = getIndexFromSquareId(clickedSquareId);
       const piece = boardState[fromIndex];
 
-      // 2. We add our new validation logic here.
       const isMyTurn = turn === playerColor;
       const isMyPiece = piece && piece.charAt(0) === playerColor;
 
       if (!isMyPiece || !isMyTurn) {
-        console.warn("[useChessGame] Piece selection blocked.", {
-          isMyPiece,
-          isMyTurn,
-        });
-        return; // Exit the function if it's not our piece or not our turn.
+        return;
       }
 
-      console.log(
-        `[useChessGame] Selecting piece ${piece} at ${clickedSquareId}.`
-      );
+      // Calculate legal moves for this specific piece
+      const moves = game.moves({ square: clickedSquareId, verbose: true });
+      const targetSquares = moves.map((m) => m.to);
+
       setSelectedSquare(clickedSquareId);
-      setLegalMoves(getLegalMoves(clickedSquareId));
-    } else {
-      // --- This block is now correct because of our previous refactor ---
-      console.log(
-        `[useChessGame] Attempting to move from ${selectedSquare} to ${clickedSquareId}.`
-      );
-      const move = {
-        from: selectedSquare,
-        to: clickedSquareId,
-      };
+      setLegalMoves(targetSquares);
+    }
 
-      if (onMove) {
-        console.log("[useChessGame] Calling onMove callback.");
-        onMove(move);
-      } else {
-        console.warn(
-          "[useChessGame] Move attempted, but no onMove callback was provided."
-        );
+    // SCENARIO B: Piece is already selected
+    else {
+      // 1. Did user click the SAME square? -> Deselect
+      if (clickedSquareId === selectedSquare) {
+        setSelectedSquare(null);
+        setLegalMoves([]);
+        return;
       }
 
-      setSelectedSquare(null);
-      setLegalMoves([]);
+      // 2. Did user click ANOTHER of their own pieces? -> Switch selection
+      const clickedIndex = getIndexFromSquareId(clickedSquareId);
+      const clickedPiece = boardState[clickedIndex];
+      if (clickedPiece && clickedPiece.charAt(0) === playerColor) {
+        // Recalculate for the new piece
+        const moves = game.moves({ square: clickedSquareId, verbose: true });
+        const targetSquares = moves.map((m) => m.to);
+        setSelectedSquare(clickedSquareId);
+        setLegalMoves(targetSquares);
+        return;
+      }
+
+      // 3. Is it a LEGAL move?
+      if (legalMoves.includes(clickedSquareId)) {
+        const moves = game.moves({ verbose: true });
+        const moveDetails = moves.find(
+          (m) => m.from === selectedSquare && m.to === clickedSquareId,
+        );
+
+        // If 'promotion' exists in the move object (it will be 'q', 'r', etc.), use it.
+        // If not, it's undefined.
+        // Note: chess.js usually defaults promotion to 'q' in .moves(),
+        // but we need to explicitly pass it to the backend.
+
+        const isPromotion = moveDetails?.promotion;
+
+        const move = {
+          from: selectedSquare,
+          to: clickedSquareId,
+          // Force 'q' if it's a promotion move, otherwise undefined
+          promotion: isPromotion ? "q" : undefined,
+        };
+
+        // Fire callback
+        if (onMove) onMove(move);
+
+        // Optimistic UI update (optional, but makes it feel snappy)
+        // For now, we clear selection and wait for server to send new FEN
+        setSelectedSquare(null);
+        setLegalMoves([]);
+      } else {
+        // 4. Illegal move clicked (empty square or invalid capture)
+        // Just deselect to be safe, or do nothing.
+        setSelectedSquare(null);
+        setLegalMoves([]);
+      }
     }
   };
 
