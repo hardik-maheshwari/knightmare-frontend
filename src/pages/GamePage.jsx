@@ -3,13 +3,26 @@ import { Link, useParams } from "react-router-dom";
 import ChessBoard from "../components/ChessBoard";
 import { useAuth } from "../hooks/useAuth";
 import { useGameSocket } from "../context/GameSocket";
+import VideoChat from "../components/VideoChat";
+import ChatPanel from "../components/ChatPanel";
 import "./GamePage.css";
 
 function GamePage() {
   const { gameId } = useParams();
   const { user } = useAuth();
-  const { gameData, isConnected, error, connect, disconnect, makeMove } = useGameSocket();
 
+  // We now destructure 'latestSignal' to pass it to the VideoChat
+  const {
+    gameData,
+    isConnected,
+    error,
+    connect,
+    disconnect,
+    makeMove,
+    latestSignal,
+  } = useGameSocket();
+
+  // 1. Connection Lifecycle
   useEffect(() => {
     if (gameId) {
       connect(gameId);
@@ -19,44 +32,55 @@ function GamePage() {
     };
   }, [gameId, connect, disconnect]);
 
-  // --- AUTO-QUEEN LOGIC HERE ---
+  // 2. Handle Moves (Auto-Queen Logic)
   const handleMakeMove = (move) => {
-    // 1. Check if the move object ALREADY has a promotion flag (from useChessGame)
-    // 2. Or if we need to infer it (Manual string check for pawn reaching last rank)
-    //    (e.g., White pawn on rank 7 going to rank 8)
-    
-    let promotionChar = move.promotion || "";
-    
-    // Fallback: If useChessGame didn't tag it, but it's a pawn move to the end:
-    if (!promotionChar) {
-       // Ideally useChessGame handles this, but as a safety net:
-       // This simple check assumes 'move' has {from, to}
-       // We can just append 'q' if the backend requires it for ALL promotions.
-       // However, relies on the hook sending the correct flag.
-    }
-
+    // The 'promotion' field comes from our updated useChessGame hook.
+    // If it's a promotion move, it will be 'q'.
+    const promotionChar = move.promotion || "";
     const moveUci = `${move.from}${move.to}${promotionChar}`;
+
     console.log(`[GamePage] Submitting Move: ${moveUci}`);
     makeMove(gameId, moveUci);
   };
 
+  // 3. Loading / Error States
   if (error) {
     return (
-      <div className="game-page-container status-container">
-        <h2 className="error-text">Connection Error: {error}</h2>
-        <Link to="/lobby" className="primary-button">Back to Lobby</Link>
+      <div
+        className="game-layout-grid"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div className="status-container">
+          <h2 className="error-text">Connection Error</h2>
+          <p>{error}</p>
+          <Link to="/lobby" className="primary-button">
+            Back to Lobby
+          </Link>
+        </div>
       </div>
     );
   }
 
   if (!isConnected || !gameData) {
     return (
-      <div className="game-page-container status-container">
-        <h2>{isConnected ? "Waiting for game data..." : "Connecting..."}</h2>
+      <div
+        className="game-layout-grid"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <h2>Connecting to Game...</h2>
       </div>
     );
   }
 
+  // 4. Prepare Game Data
   const isWaitingForOpponent = !gameData.black_player || !gameData.white_player;
   const playerColor = user.user_id === gameData.black_player?.id ? "b" : "w";
   const { current_fen: fen, turn, status, moves } = gameData;
@@ -68,8 +92,7 @@ function GamePage() {
     turn,
   };
 
-  // --- HISTORY PROCESSOR ---
-  // Convert flat array ["e4", "e5", "Nf3"] into pairs [["e4", "e5"], ["Nf3", null]]
+  // Helper: Group moves into pairs for the table: ["e4", "e5"] -> [["e4", "e5"], ...]
   const movePairs = [];
   if (moves && Array.isArray(moves)) {
     for (let i = 0; i < moves.length; i += 2) {
@@ -77,53 +100,115 @@ function GamePage() {
     }
   }
 
+  // 5. Render The Grid Layout
   return (
-    <div className="game-page-container">
-      <div className="game-info-bar">
-        <div className="player-info white">White: {gameData.white_player?.username || "..."}</div>
-        <div className="game-status-info">
-          <h1>Game ID: {gameId}</h1>
-          <p>Status: <span className="game-status">{status?.replace(/_/g, " ")}</span></p>
-          <p>Turn: <span className="game-turn">{turn === "w" ? "White" : "Black"}</span></p>
+    <div className="game-layout-grid">
+      {/* --- LEFT COLUMN: History & Info --- */}
+      <div className="sidebar-left">
+        {/* Game Status Panel */}
+        <div
+          className="move-history-panel"
+          style={{ flexGrow: 0, minHeight: "auto", marginBottom: "10px" }}
+        >
+          <h3 style={{ marginTop: 0, borderBottom: "1px solid #444" }}>
+            Game Info
+          </h3>
+          <div style={{ fontSize: "0.9rem", color: "#ccc" }}>
+            <p style={{ margin: "5px 0" }}>
+              <strong>ID:</strong> {gameId}
+            </p>
+            <p style={{ margin: "5px 0" }}>
+              <strong>Status:</strong>{" "}
+              <span style={{ color: "#a0c4ff", textTransform: "capitalize" }}>
+                {status?.replace(/_/g, " ")}
+              </span>
+            </p>
+          </div>
         </div>
-        <div className="player-info black">Black: {gameData.black_player?.username || "..."}</div>
+
+        {/* Move History Panel */}
+        <div className="move-history-panel">
+          <h3 style={{ marginTop: 0, borderBottom: "1px solid #444" }}>
+            Moves
+          </h3>
+          <div className="history-scroll-area">
+            <table className="history-table">
+              <thead>
+                <tr style={{ color: "#888", textAlign: "left" }}>
+                  <th>#</th>
+                  <th>White</th>
+                  <th>Black</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movePairs.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="3"
+                      style={{
+                        textAlign: "center",
+                        color: "#666",
+                        padding: "20px",
+                      }}
+                    >
+                      Start the game!
+                    </td>
+                  </tr>
+                ) : (
+                  movePairs.map((pair, index) => (
+                    <tr
+                      key={index}
+                      style={{
+                        backgroundColor:
+                          index % 2 === 0
+                            ? "transparent"
+                            : "rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <td className="move-num">{index + 1}.</td>
+                      <td>{pair[0]}</td>
+                      <td>{pair[1]}</td>
+                    </tr>
+                  ))
+                )}
+                {/* Auto-scroll anchor could go here */}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <ChessBoard {...propsForBoard} />
+      {/* --- CENTER COLUMN: Chess Board --- */}
+      <div className="main-board-area">
+        <div className="opponent-label">
+          {/* Logic to show Opponent Name */}
+          {playerColor === "w"
+            ? gameData.black_player?.username || "Waiting for Black..."
+            : gameData.white_player?.username || "Waiting for White..."}
+        </div>
 
-      {/* --- FIXED HISTORY SECTION --- */}
-      <div className="move-history" style={{ 
-          color: "#fff", 
-          backgroundColor: "#333", 
-          padding: "1rem", 
-          borderRadius: "8px",
-          marginTop: "1rem",
-          minHeight: "100px"
-      }}>
-        <h3 style={{ marginTop: 0, textAlign: "center", borderBottom: "1px solid #555" }}>Move History</h3>
-        
-        {movePairs.length === 0 ? (
-          <p style={{ textAlign: "center", color: "#aaa" }}>No moves yet.</p>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ color: "#aaa", fontSize: "0.9rem" }}>
-                <th style={{ textAlign: "left" }}>#</th>
-                <th style={{ textAlign: "left" }}>White</th>
-                <th style={{ textAlign: "left" }}>Black</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movePairs.map((pair, index) => (
-                <tr key={index} style={{ borderBottom: "1px solid #444" }}>
-                  <td style={{ color: "#888", width: "30px" }}>{index + 1}.</td>
-                  <td style={{ padding: "4px" }}>{pair[0]}</td>
-                  <td style={{ padding: "4px" }}>{pair[1]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <ChessBoard {...propsForBoard} />
+
+        <div className="self-label">
+          {user.username} ({playerColor === "w" ? "White" : "Black"})
+        </div>
+      </div>
+
+      {/* --- RIGHT COLUMN: Video & Chat --- */}
+      <div className="sidebar-right">
+        {/* Pass the signal data to VideoChat so it knows who to call */}
+        <VideoChat
+          gameId={gameId}
+          userId={user.user_id}
+          incomingSignal={latestSignal}
+        />
+
+        {/* --- UPDATED SECTION --- */}
+        {/* We use a flex container to let ChatPanel take remaining height */}
+        <div style={{ flex: 1, minHeight: 0, marginTop: "10px" }}>
+          <ChatPanel gameId={gameId} />
+        </div>
+        {/* ----------------------- */}
       </div>
     </div>
   );

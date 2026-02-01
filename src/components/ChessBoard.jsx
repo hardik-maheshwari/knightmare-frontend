@@ -1,14 +1,22 @@
-import React from "react";
+import React, { useMemo } from "react";
 import ChessPiece from "./ChessPiece";
 import "./ChessBoard.css";
 import { useChessGame } from "../hooks/useChessGame";
 
-const Chessboard = ({ playerColor, initialFen, onMove,turn }) => {
-  const { boardState, selectedSquare, handleSquareClick, legalMoves } =
-    useChessGame(playerColor, initialFen, onMove,turn);
+const ranks = ["1", "2", "3", "4", "5", "6", "7", "8"];
+const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
-  const ranks = ["1", "2", "3", "4", "5", "6", "7", "8"];
-  const files = ["a", "b", "c", "d", "e", "f", "g", "h"];
+const getIndex = (sid) => {
+  const fileChar = sid.charAt(0);
+  const rankChar = sid.charAt(1);
+  const fileIndex = files.indexOf(fileChar);
+  const rankIndex = parseInt(rankChar) - 1;
+  return (7 - rankIndex) * 8 + fileIndex;
+};
+
+const Chessboard = ({ playerColor, initialFen, onMove, turn }) => {
+  const { boardState, selectedSquare, handleSquareClick, legalMoves } =
+    useChessGame(playerColor, initialFen, onMove, turn);
 
   const isFlipped = playerColor === "b";
 
@@ -19,46 +27,49 @@ const Chessboard = ({ playerColor, initialFen, onMove,turn }) => {
 
   // --- END OF FLIP LOGIC ---
 
-  const squares = [];
-  // 3. The loops now iterate over the pre-ordered visual arrays.
-  for (const rank of visualRanks) {
-    for (const file of visualFiles) {
-      const squareId = `${file}${rank}`;
-      const isLegalMove = legalMoves.includes(squareId);
+  const squares = useMemo(() => {
+    const generatedSquares = [];
 
-      const r = parseInt(rank) - 1;
-      const f = files.indexOf(file);
-      const isLightSquare = (r + f) % 2 !== 0;
+    for (const rank of visualRanks) {
+      for (const file of visualFiles) {
+        const squareId = `${file}${rank}`;
+        const isLegalMove = legalMoves.includes(squareId);
 
-      // This temporary helper is still needed.
-      const getIndex = (sid) => {
-        const fileChar = sid.charAt(0);
-        const rankChar = sid.charAt(1);
-        const fileIndex = files.indexOf(fileChar);
-        const rankIndex = parseInt(rankChar) - 1;
-        return (7 - rankIndex) * 8 + fileIndex;
-      };
+        const r = parseInt(rank) - 1;
+        const f = files.indexOf(file);
+        const isLightSquare = (r + f) % 2 !== 0;
 
-      const piece = boardState[getIndex(squareId)];
-      const isSelected = squareId === selectedSquare;
+        // Use the external helper
+        const index = getIndex(squareId, files);
+        const piece = boardState[index];
 
-      const squareClassName = `square ${isLightSquare ? "light" : "dark"} ${
-        isSelected ? "selected" : ""
-      } ${isLegalMove ? "legal-move-hint" : ""}`;
+        const isSelected = squareId === selectedSquare;
 
-      squares.push(
-        <div
-          key={squareId}
-          className={squareClassName}
-          onClick={() => handleSquareClick(squareId)}
-        >
-          {piece && <ChessPiece piece={piece} />}
-        </div>
-      );
+        const squareClassName = `square ${isLightSquare ? "light" : "dark"} ${
+          isSelected ? "selected" : ""
+        } ${isLegalMove ? "legal-move-hint" : ""}`;
+
+        generatedSquares.push(
+          <div
+            key={squareId}
+            className={squareClassName}
+            onClick={() => handleSquareClick(squareId)}
+          >
+            {piece && <ChessPiece piece={piece} />}
+          </div>,
+        );
+      }
     }
-  }
+    return generatedSquares;
+  }, [
+    boardState,
+    selectedSquare,
+    legalMoves,
+    visualRanks,
+    visualFiles,
+    handleSquareClick,
+  ]);
 
-  // The final return statement also uses the visual arrays for the labels.
   return (
     <div className="board-layout">
       <div className="rank-labels">

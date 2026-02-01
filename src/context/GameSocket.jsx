@@ -4,7 +4,7 @@ import React, {
   useContext,
   useCallback,
   useRef,
-  useEffect, // Added useEffect for global cleanup
+  useEffect,
 } from "react";
 import { useAuth } from "../hooks/useAuth";
 import apiClient from "../services/apiClient";
@@ -14,21 +14,28 @@ const GameSocketContext = createContext(null);
 export function GameSocketProvider({ children }) {
   const { token } = useAuth();
 
+  // --- STATE ---
   const [gameData, setGameData] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]); // <--- NEW: Chat State
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState(null);
+  const [latestSignal, setLatestSignal] = useState(null);
 
-  // Refs to track connection state without triggering re-renders
+  // --- REFS ---
   const socketRef = useRef(null);
   const isConnectingRef = useRef(false);
-  const mountedRef = useRef(true); // Track if component is mounted
+  const mountedRef = useRef(true);
+  const reconnectTimeoutRef = useRef(null); // <--- NEW: Reconnect Ref
 
-  // Track mount status to prevent setting state on unmounted component
+  // --- CLEANUP ---
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      // Safety cleanup on unmount
+      // Clear any pending reconnects
+      if (reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
+      // Close socket
       if (socketRef.current) {
         socketRef.current.close();
       }
@@ -37,57 +44,62 @@ export function GameSocketProvider({ children }) {
 
   const connect = useCallback(
     async (gameId) => {
-      // 1. Guard clauses
       if (!token) {
         setError("Authentication token is missing.");
         return;
       }
-
-      // Prevent double-initiation (React StrictMode fix)
-      if (isConnectingRef.current || socketRef.current) {
-        console.log("[GameSocket] Connection already in progress or active.");
+      // Prevent double-initiation
+      if (
+        isConnectingRef.current ||
+        socketRef.current?.readyState === WebSocket.OPEN
+      ) {
         return;
       }
 
-      console.log(
-        `[GameSocket] Starting connection process for game: ${gameId}`,
-      );
+      // Clear any pending retry timer if we are starting a fresh connection
+      if (reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
+
+      console.log(`[GameSocket] Connecting to game: ${gameId}`);
       isConnectingRef.current = true;
       setError(null);
 
       try {
-        // 2. Get Ticket
+        // 1. Get Ticket
         const response = await apiClient.post(
           `/api/games/${gameId}/ws-ticket/`,
         );
-
-        // If unmounted while waiting for ticket, stop here.
         if (!mountedRef.current) return;
 
         const ticket = response.data.data.ticket;
-        if (!ticket) throw new Error("No ticket received from server.");
+        if (!ticket) throw new Error("No ticket received.");
 
-        // 3. Construct URL (Handle SSL automatically)
-        // If frontend is https://, use wss://. If http://, use ws://
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const host = window.location.host; // e.g. localhost:5173
+        // 2. Connect WS
+        const backendUrl = import.meta.env.VITE_BACKEND_URL;
+        let wsUrl;
 
-        // Note: This relies on Vite Proxy forwarding /api/games/... to your backend
-        const url = `${protocol}//${host}/api/games/${gameId}/ws?ticket=${ticket}`;
+        if (backendUrl) {
+          // Production / configured environment
+          // Create a URL object to easily parse protocol and host
+          const urlObj = new URL(backendUrl);
+          const wsProtocol = urlObj.protocol === "https:" ? "wss:" : "ws:";
+          wsUrl = `${wsProtocol}//${urlObj.host}/api/games/${gameId}/ws?ticket=${ticket}`;
+        } else {
+          // Fallback for local dev if env var is missing (uses same host)
+          const protocol =
+            window.location.protocol === "https:" ? "wss:" : "ws:";
+          const host = window.location.host;
+          wsUrl = `${protocol}//${host}/api/games/${gameId}/ws?ticket=${ticket}`;
+        }
 
-        console.log(`[GameSocket] Connecting to: ${url}`);
-        const newSocket = new WebSocket(url);
+        const newSocket = new WebSocket(wsUrl);
 
-        // 4. Bind Events
         newSocket.onopen = () => {
-          if (!mountedRef.current) {
-            newSocket.close();
-            return;
-          }
-          console.log("[GameSocket] Connection established.");
+          if (!mountedRef.current) return newSocket.close();
+          console.log("[GameSocket] Connected.");
           setIsConnected(true);
           setError(null);
-          isConnectingRef.current = false; // Connection phase done
+          isConnectingRef.current = false;
         };
 
         newSocket.onmessage = (event) => {
@@ -96,29 +108,23 @@ export function GameSocketProvider({ children }) {
             const message = JSON.parse(event.data);
 
             if (message.type === "game_update") {
+              const newData = message.data;
+
+              // A. Handle Chat History (if provided)
+              if (newData.chat_history) {
+                setChatMessages(newData.chat_history);
+              }
+
+              // B. Handle Game State
               setGameData((prevData) => {
-                const newData = message.data;
-
-                // 1. First Load: If no previous data exists, trust the server entirely.
-                // (The initial connection/join always sends the full history).
-                if (!prevData) {
-                  return newData;
-                }
-
-                // 2. Incremental Update Logic
-                // The server sends `moves: []` to save bandwidth on active moves.
-                // We need to check if we should overwrite or append.
+                if (!prevData) return newData;
+                // Merge Moves intelligently
                 let mergedMoves = [];
-
                 if (newData.moves && newData.moves.length > 0) {
-                  // Case A: Server sent the full list (e.g. Reconnect/Join). Use it.
                   mergedMoves = newData.moves;
                 } else {
-                  // Case B: Server sent empty list. Use our OLD list + the NEW move.
                   const oldMoves = prevData.moves || [];
                   mergedMoves = [...oldMoves];
-
-                  // Only append if there is a 'last_move' and it's not already the last one (dedupe)
                   if (
                     newData.last_move &&
                     oldMoves[oldMoves.length - 1] !== newData.last_move
@@ -126,15 +132,14 @@ export function GameSocketProvider({ children }) {
                     mergedMoves.push(newData.last_move);
                   }
                 }
-
-                return {
-                  ...newData, // Take the new FEN, Turn, Status, etc.
-                  moves: mergedMoves, // Use our smart, merged history list
-                };
+                return { ...newData, moves: mergedMoves };
               });
+            } else if (message.type === "signal_update") {
+              setLatestSignal(message.data);
+            } else if (message.type === "chat_message") {
+              // C. Handle Real-time Chat
+              setChatMessages((prev) => [...prev, message.data]);
             }
-
-            // Handle other message types if needed (e.g. "takeback_offered")
           } catch (e) {
             console.error("Error parsing WS message", e);
           }
@@ -142,26 +147,37 @@ export function GameSocketProvider({ children }) {
 
         newSocket.onclose = (event) => {
           if (!mountedRef.current) return;
-          console.log(`[GameSocket] Closed: ${event.code}`);
+          console.log(
+            `[GameSocket] Closed: ${event.code} Clean: ${event.wasClean}`,
+          );
+
           setIsConnected(false);
           socketRef.current = null;
           isConnectingRef.current = false;
 
-          if (!event.wasClean) {
+          // --- RECONNECTION LOGIC ---
+          // Code 1000 = Normal Closure, 1008 = Policy Violation (don't retry 1008)
+          const isAbnormalClose =
+            !event.wasClean && event.code !== 1000 && event.code !== 1008;
+
+          if (isAbnormalClose) {
+            console.warn("Connection lost unexpectedly. Retrying in 3s...");
+            // Only show "Reconnecting" if we were previously connected to avoid flash on load
+            setError("Reconnecting...");
+
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (mountedRef.current) connect(gameId);
+            }, 3000);
+          } else if (!event.wasClean) {
             setError("Connection lost. Please refresh.");
           }
-        };
-
-        newSocket.onerror = (err) => {
-          console.error("[GameSocket] Error:", err);
-          // Let onclose handle the state cleanup
         };
 
         socketRef.current = newSocket;
       } catch (err) {
         console.error("[GameSocket] Connection failed:", err);
         if (mountedRef.current) {
-          setError(err.response?.data?.error || "Failed to connect.");
+          setError("Failed to connect.");
           setIsConnected(false);
         }
         isConnectingRef.current = false;
@@ -171,12 +187,7 @@ export function GameSocketProvider({ children }) {
   );
 
   const disconnect = useCallback(() => {
-    // We intentionally don't set isConnected(false) here immediately
-    // to prevent UI flicker if it's just a remount.
-    // The 'onclose' event will handle the state update.
-
     if (socketRef.current) {
-      console.log("[GameSocket] Disconnecting manual trigger...");
       socketRef.current.close();
       socketRef.current = null;
     }
@@ -188,19 +199,30 @@ export function GameSocketProvider({ children }) {
       await apiClient.post(`/api/games/${gameId}/moves/`, { move: moveUci });
       return true;
     } catch (error) {
-      console.error("[GameSocket] Failed to send move:", error);
-      alert(`Move failed: ${error.response?.data?.error || "Unknown error"}`);
+      console.error("Failed to send move", error);
       return false;
+    }
+  }, []);
+
+  // --- NEW: Chat Function ---
+  const sendChatMessage = useCallback(async (gameId, content) => {
+    try {
+      await apiClient.post(`/api/games/${gameId}/chat/`, { content });
+    } catch (err) {
+      console.error("Failed to send chat", err);
     }
   }, []);
 
   const value = {
     gameData,
+    latestSignal,
+    chatMessages, // <--- Exported
     isConnected,
     error,
     connect,
     disconnect,
     makeMove,
+    sendChatMessage, // <--- Exported
   };
 
   return (

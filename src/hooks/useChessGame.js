@@ -42,8 +42,8 @@ export const useChessGame = (playerColor = "w", initialFen, onMove, turn) => {
     }
   }, [initialFen]);
 
-  const handleSquareClick = (clickedSquareId) => {
-    const game = gameRef.current; // Use our local instance
+   const handleSquareClick = (clickedSquareId) => {
+    const game = gameRef.current;
 
     // SCENARIO A: No piece currently selected
     if (selectedSquare === null) {
@@ -57,7 +57,6 @@ export const useChessGame = (playerColor = "w", initialFen, onMove, turn) => {
         return;
       }
 
-      // Calculate legal moves for this specific piece
       const moves = game.moves({ square: clickedSquareId, verbose: true });
       const targetSquares = moves.map((m) => m.to);
 
@@ -78,7 +77,6 @@ export const useChessGame = (playerColor = "w", initialFen, onMove, turn) => {
       const clickedIndex = getIndexFromSquareId(clickedSquareId);
       const clickedPiece = boardState[clickedIndex];
       if (clickedPiece && clickedPiece.charAt(0) === playerColor) {
-        // Recalculate for the new piece
         const moves = game.moves({ square: clickedSquareId, verbose: true });
         const targetSquares = moves.map((m) => m.to);
         setSelectedSquare(clickedSquareId);
@@ -88,35 +86,33 @@ export const useChessGame = (playerColor = "w", initialFen, onMove, turn) => {
 
       // 3. Is it a LEGAL move?
       if (legalMoves.includes(clickedSquareId)) {
-        const moves = game.moves({ verbose: true });
+        // CHANGE 1: Only look for moves generated from the 'selectedSquare'
+        // This is faster than generating moves for the whole board.
+        const moves = game.moves({ square: selectedSquare, verbose: true });
+        
         const moveDetails = moves.find(
-          (m) => m.from === selectedSquare && m.to === clickedSquareId,
+          (m) => m.to === clickedSquareId
         );
 
-        // If 'promotion' exists in the move object (it will be 'q', 'r', etc.), use it.
-        // If not, it's undefined.
-        // Note: chess.js usually defaults promotion to 'q' in .moves(),
-        // but we need to explicitly pass it to the backend.
-
-        const isPromotion = moveDetails?.promotion;
+        // CHANGE 2: Robust check. If a move exists and has the 'promotion' field,
+        // it means this move IS a promotion.
+        const isPromotion = !!moveDetails?.promotion;
 
         const move = {
           from: selectedSquare,
           to: clickedSquareId,
-          // Force 'q' if it's a promotion move, otherwise undefined
+          // Currently hardcoded to Queen ('q'). 
+          // If you want to support underpromotion (Rook/Knight), 
+          // you would need to open a Modal UI here instead of firing onMove immediately.
           promotion: isPromotion ? "q" : undefined,
         };
 
-        // Fire callback
         if (onMove) onMove(move);
 
-        // Optimistic UI update (optional, but makes it feel snappy)
-        // For now, we clear selection and wait for server to send new FEN
         setSelectedSquare(null);
         setLegalMoves([]);
       } else {
-        // 4. Illegal move clicked (empty square or invalid capture)
-        // Just deselect to be safe, or do nothing.
+        // 4. Illegal move clicked
         setSelectedSquare(null);
         setLegalMoves([]);
       }
