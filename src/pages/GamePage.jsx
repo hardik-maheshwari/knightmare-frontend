@@ -6,6 +6,8 @@ import { useGameSocket } from "../context/GameSocket";
 import VideoChat from "../components/VideoChat";
 import ChatPanel from "../components/ChatPanel";
 import "./GamePage.css";
+import GameOverModal from "../components/GameOverModal";
+import ChessClock from "../components/ChessClock";
 
 function GamePage() {
   const { gameId } = useParams();
@@ -20,6 +22,8 @@ function GamePage() {
     disconnect,
     makeMove,
     latestSignal,
+    resignGame,
+    claimTimeout,
   } = useGameSocket();
 
   // 1. Connection Lifecycle
@@ -41,6 +45,12 @@ function GamePage() {
 
     console.log(`[GamePage] Submitting Move: ${moveUci}`);
     makeMove(gameId, moveUci);
+  };
+
+  const handleResign = () => {
+    if (window.confirm("Are you sure you want to resign?")) {
+      resignGame(gameId);
+    }
   };
 
   // 3. Loading / Error States
@@ -103,6 +113,14 @@ function GamePage() {
   // 5. Render The Grid Layout
   return (
     <div className="game-layout-grid">
+      {/* --- MODAL: Game Over / Resignation / Timeout --- */}
+      {gameData && (
+        <GameOverModal
+          status={gameData.status}
+          reason={gameData.game_over_reason}
+        />
+      )}
+
       {/* --- LEFT COLUMN: History & Info --- */}
       <div className="sidebar-left">
         {/* Game Status Panel */}
@@ -124,6 +142,18 @@ function GamePage() {
               </span>
             </p>
           </div>
+        </div>
+
+        {/* Resign Button */}
+        <div style={{ marginTop: "auto", padding: "10px" }}>
+          <button
+            onClick={handleResign}
+            className="secondary-button"
+            style={{ backgroundColor: "#811d1d", width: "100%" }}
+            disabled={gameData.status !== "active"}
+          >
+            Resign Game
+          </button>
         </div>
 
         {/* Move History Panel */}
@@ -171,26 +201,59 @@ function GamePage() {
                     </tr>
                   ))
                 )}
-                {/* Auto-scroll anchor could go here */}
               </tbody>
             </table>
           </div>
         </div>
       </div>
 
-      {/* --- CENTER COLUMN: Chess Board --- */}
+      {/* --- CENTER COLUMN: Chess Board + Clocks --- */}
       <div className="main-board-area">
-        <div className="opponent-label">
-          {/* Logic to show Opponent Name */}
-          {playerColor === "w"
-            ? gameData.black_player?.username || "Waiting for Black..."
-            : gameData.white_player?.username || "Waiting for White..."}
+        {/* TOP STRIP (Opponent) */}
+        <div className="player-strip opponent">
+          <div className="player-info">
+            {playerColor === "w"
+              ? gameData.black_player?.username || "Waiting for Black..."
+              : gameData.white_player?.username || "Waiting for White..."}
+          </div>
+
+          <ChessClock
+            currentMs={
+              playerColor === "w"
+                ? gameData.black_time_ms
+                : gameData.white_time_ms
+            }
+            isTurn={
+              gameData.status === "active" &&
+              (playerColor === "w" ? turn === "b" : turn === "w")
+            }
+            lastMoveAt={gameData.last_move_at}
+            onTimeout={() => claimTimeout(gameId)}
+          />
         </div>
 
+        {/* THE BOARD */}
         <ChessBoard {...propsForBoard} />
 
-        <div className="self-label">
-          {user.username} ({playerColor === "w" ? "White" : "Black"})
+        {/* BOTTOM STRIP (Self) */}
+        <div className="player-strip self">
+          <div className="player-info">
+            {user.username} ({playerColor === "w" ? "White" : "Black"})
+          </div>
+
+          <ChessClock
+            currentMs={
+              playerColor === "w"
+                ? gameData.white_time_ms
+                : gameData.black_time_ms
+            }
+            isTurn={
+              gameData.status === "active" &&
+              (playerColor === "w" ? turn === "w" : turn === "b")
+            }
+            lastMoveAt={gameData.last_move_at}
+            onTimeout={() => claimTimeout(gameId)}
+          />
         </div>
       </div>
 
@@ -203,12 +266,10 @@ function GamePage() {
           incomingSignal={latestSignal}
         />
 
-        {/* --- UPDATED SECTION --- */}
-        {/* We use a flex container to let ChatPanel take remaining height */}
+        {/* Chat Panel */}
         <div style={{ flex: 1, minHeight: 0, marginTop: "10px" }}>
           <ChatPanel gameId={gameId} />
         </div>
-        {/* ----------------------- */}
       </div>
     </div>
   );

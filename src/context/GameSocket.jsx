@@ -213,16 +213,34 @@ export function GameSocketProvider({ children }) {
     }
   }, []);
 
+  const resignGame = useCallback(async (gameId) => {
+    try {
+      await apiClient.post(`/api/games/${gameId}/resign/`, {});
+    } catch (err) {
+      console.error("Failed to resign", err);
+    }
+  }, []);
+
+  const claimTimeout = useCallback(async (gameId) => {
+    try {
+      await apiClient.post(`/api/games/${gameId}/claim-timeout/`, {});
+    } catch (err) {
+      console.error("Failed to claim timeout", err);
+    }
+  }, []);
+
   const value = {
     gameData,
     latestSignal,
-    chatMessages, // <--- Exported
+    chatMessages,
     isConnected,
     error,
     connect,
     disconnect,
     makeMove,
-    sendChatMessage, // <--- Exported
+    sendChatMessage,
+    resignGame,
+    claimTimeout,
   };
 
   return (

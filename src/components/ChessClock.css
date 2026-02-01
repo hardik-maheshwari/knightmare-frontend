@@ -1,0 +1,40 @@
+.chess-clock {
+  background-color: #262421; /* Classic chess.com/lichess dark grey */
+  color: #bababa;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-family: "Roboto Mono", "Courier New", monospace; /* Monospace is crucial for clocks */
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-width: 90px;
+  text-align: center;
+  border-bottom: 4px solid #1b1919; /* 3D effect */
+  transition: all 0.2s ease;
+}
+
+/* When it is this player's turn */
+.chess-clock.active {
+  background-color: #fff;
+  color: #000;
+  border-bottom: 4px solid #ccc;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+}
+
+/* When time is < 30 seconds */
+.chess-clock.low-time {
+  background-color: #4a0d0d;
+  color: #ff6b6b;
+  border-bottom-color: #2b0808;
+}
+
+.chess-clock.active.low-time {
+  background-color: #e33636;
+  color: #fff;
+  animation: pulse-clock 1s infinite ease-in-out;
+}
+
+@keyframes pulse-clock {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}

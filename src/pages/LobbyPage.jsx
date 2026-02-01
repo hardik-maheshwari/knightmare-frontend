@@ -15,7 +15,7 @@ const LobbyPage = () => {
   const handleCreateGame = async () => {
     if (isLoading) {
       console.warn(
-        "[LobbyPage] Create game blocked, a request is already in progress."
+        "[LobbyPage] Create game blocked, a request is already in progress.",
       );
       return;
     }
@@ -23,6 +23,11 @@ const LobbyPage = () => {
     console.log("[LobbyPage] handleCreateGame started.");
     setIsLoading(true);
     setError(null);
+
+    const slowServerTimer = setTimeout(() => {
+      setError("Waking up the server... this might take up to 60 seconds.");
+    }, 3000);
+    
     try {
       console.log("[LobbyPage] Sending create game request to /api/games/.");
       const response = await apiClient.post("/api/games/", {});
@@ -32,7 +37,7 @@ const LobbyPage = () => {
       const gameId = gameData.game_id;
 
       console.log(
-        `[LobbyPage] Game created successfully. Game ID: ${gameId}. Navigating...`
+        `[LobbyPage] Game created successfully. Game ID: ${gameId}. Navigating...`,
       );
 
       navigate(`/game/${gameId}`);
@@ -53,7 +58,7 @@ const LobbyPage = () => {
     const trimmedId = joinGameId.trim();
     if (!trimmedId || isLoading) {
       console.warn(
-        "[LobbyPage] Join game blocked. ID is empty or request in progress."
+        "[LobbyPage] Join game blocked. ID is empty or request in progress.",
       );
       return;
     }
@@ -62,18 +67,18 @@ const LobbyPage = () => {
     setError(null);
     try {
       console.log(
-        `[LobbyPage] Sending join game request to /api/games/${trimmedId}/join.`
+        `[LobbyPage] Sending join game request to /api/games/${trimmedId}/join.`,
       );
       await apiClient.post(`/api/games/${trimmedId}/join/`, {});
 
       console.log(
-        `[LobbyPage] Successfully joined game ${trimmedId}. Navigating...`
+        `[LobbyPage] Successfully joined game ${trimmedId}. Navigating...`,
       );
       navigate(`/game/${trimmedId}`);
     } catch (err) {
       console.error(
         `[LobbyPage] Failed to join game ${trimmedId}.`,
-        err.response || err
+        err.response || err,
       );
       if (err.response && err.response.data && err.response.data.error) {
         setError(err.response.data.error);
