@@ -55,7 +55,11 @@ const LobbyPage = () => {
   };
 
   const handleJoinGame = async () => {
-    const trimmedId = joinGameId.trim();
+    // Accept either a bare ID ("2U2rNwsjTc") or a pasted game link
+    // ("http://localhost:5173/game/2U2rNwsjTc"): take what follows "/game/".
+    const input = joinGameId.trim();
+    const linkMatch = input.match(/\/game\/([^/?#]+)/);
+    const trimmedId = linkMatch ? linkMatch[1] : input;
     if (!trimmedId || isLoading) {
       console.warn(
         "[LobbyPage] Join game blocked. ID is empty or request in progress.",
