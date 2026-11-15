@@ -23,6 +23,11 @@ dist-ssr
 *.sln
 *.sw?
 
+# Env files (Vite also loads .env.production etc.) — keep only the template
 .env
+.env.*
+!.env.example
 .vscode
 frontend_tour.txt
+# Firebase deploy cache
+.firebase/
